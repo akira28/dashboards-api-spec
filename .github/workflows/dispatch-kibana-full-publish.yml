@@ -1,0 +1,39 @@
+# Tells elastic/kibana to rebuild and publish kibana-full.yaml when this repo's spec changes.
+# Kibana's "OpenAPI publish (stateful, full)" workflow checks out this repo at main, so it
+# always builds from the commit that triggered this run or a later one.
+name: Dispatch Kibana full spec publish
+
+on:
+  push:
+    paths:
+      - openapi/kibana-openapi.yaml
+      - scripts/filter-openapi.mjs
+      - package.json
+      - package-lock.json
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: dispatch-kibana-full-publish
+  cancel-in-progress: true
+
+jobs:
+  dispatch:
+    if: github.ref_name == github.event.repository.default_branch
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Send dashboards-api-spec-updated to elastic/kibana
+        env:
+          GH_TOKEN: ${{ secrets.KIBANA_DISPATCH_TOKEN }}
+          SHA: ${{ github.sha }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::The KIBANA_DISPATCH_TOKEN secret is not set. It needs write access to the contents of elastic/kibana to send repository_dispatch events."
+            exit 1
+          fi
+          gh api repos/elastic/kibana/dispatches \
+            --method POST \
+            --field event_type=dashboards-api-spec-updated \
+            --field "client_payload[sha]=$SHA"
